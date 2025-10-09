@@ -1,0 +1,21 @@
+{
+  "name": "pumpfun_rapidlaunch",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "@solana/web3.js": "^1.98.4",
+    "dotenv": "^17.2.2",
+    "openai": "^6.0.0",
+    "socket.io-client": "^4.8.1",
+    "ws": "^8.18.3"
+  }
+}
