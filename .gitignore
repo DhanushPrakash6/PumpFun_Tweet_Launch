@@ -1,0 +1,48 @@
+# Node.js
+node_modules/
+npm-debug.log
+yarn-error.log
+package-lock.json
+yarn.lock
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.env
+*.venv
+venv/
+env/
+
+# Java
+*.class
+*.jar
+*.war
+*.ear
+*.iml
+*.log
+target/
+
+# Visual Studio / IDE files
+.vscode/
+.idea/
+*.suo
+*.user
+*.DS_Store
+
+# Build directories
+dist/
+build/
+out/
+
+# Logs
+*.log
+
+# OS generated files
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Environment files
+.env
