@@ -1,4 +1,4 @@
-# PumpFun Tweet Tokenizer 🚀
+# PumpFun Tweet Launch 🚀
 
 PumpFun Tweet Tokenizer is a Node.js project that **listens to trending tweets** and automatically **creates tokenized meme tokens** on PumpFun to help **creators earn rewards**. It uses WebSockets, Solana blockchain, and Google Generative AI to generate token metadata from tweets.
 
