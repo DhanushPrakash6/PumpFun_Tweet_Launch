@@ -1,10 +1,8 @@
 require("dotenv").config();
-const { GoogleGenerativeAI } = require("@google/generative-ai");
 const { Keypair } = require("@solana/web3.js");
 const WebSocket = require("ws");
 const bs58 = require("bs58");
 const crypto = require("crypto");
-const ai = new GoogleGenerativeAI(process.env.GOOGLEAI_API_KEY);
 
 const wsUrl = "wss://rapidlaunch.io/socket.io/?EIO=4&transport=websocket";
 
@@ -12,6 +10,8 @@ let ws;
 let isAuthenticated = false;
 const keyMap = new Map();
 let activeKeyId = null;
+
+// -------------------- Helper Functions --------------------
 
 function base64ToBytes(b64) {
   return Buffer.from(b64, "base64");
@@ -38,86 +38,124 @@ function concatUint8(...arrays) {
   return out;
 }
 
-async function sendCreateTx({symbol, name, description, image}) {
-    // const mintKeypair = Keypair.generate();
-    // const secretKey = bs58.decode(process.env.PRIVATE_KEY);
-    const mintKeypair = Keypair.generate()
+// -------------------- Create Transaction --------------------
+
+async function sendCreateTx({ symbol, name, description, image }) {
+  try {
+    const mintKeypair = Keypair.generate();
     const imgResponse = await fetch(image);
-    if (!imgResponse.ok) throw new Error(`Failed to fetch image: ${imgResponse.status}`);
+    if (!imgResponse.ok)
+      throw new Error(`Failed to fetch image: ${imgResponse.status}`);
+
     const arrayBuffer = await imgResponse.arrayBuffer();
     const blob = new Blob([arrayBuffer], { type: "image/png" });
+
     const formData = new FormData();
-    formData.append("file", blob),
-    formData.append("name", name),
-    formData.append("symbol", symbol),
-    formData.append("description", description),
-    // formData.append("twitter", "https://x.com/a1lon9/status/1812970586420994083"),
-    // formData.append("telegram", "https://x.com/a1lon9/status/1812970586420994083"),
-    // formData.append("website", "https://pumpportal.fun"),
+    formData.append("file", blob);
+    formData.append("name", name);
+    formData.append("symbol", symbol);
+    formData.append("description", description);
     formData.append("showName", "true");
 
     const metadataResponse = await fetch("https://pump.fun/api/ipfs", {
-        method: "POST",
-        body: formData,
+      method: "POST",
+      body: formData,
     });
+
     const metadataResponseJSON = await metadataResponse.json();
 
-    const response = await fetch(`https://pumpportal.fun/api/trade?api-key=${process.env.PUMP_PORTAL_API_KEY}`, {
+    const response = await fetch(
+      `https://pumpportal.fun/api/trade?api-key=${process.env.PUMP_PORTAL_API_KEY}`,
+      {
         method: "POST",
         headers: {
-            "Content-Type": "application/json"
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
-            "action": "create",
-            "tokenMetadata": {
-                name: metadataResponseJSON.metadata.name,
-                symbol: metadataResponseJSON.metadata.symbol,
-                uri: metadataResponseJSON.metadataUri
-            },
-            "mint": bs58.encode(mintKeypair.secretKey), 
-            "denominatedInSol": "true", 
-            "amount": 0, 
-            "slippage": 0, 
-            "priorityFee": 0,
-            "pool": "pump"
-        })
-    });
-    if(response.status === 200){
-        console.log(response);
-        const data = await response.json();
-        console.log("Transaction: https://solscan.io/tx/" + data.signature);
+          action: "create",
+          tokenMetadata: {
+            name: metadataResponseJSON.metadata.name,
+            symbol: metadataResponseJSON.metadata.symbol,
+            uri: metadataResponseJSON.metadataUri,
+          },
+          mint: bs58.encode(mintKeypair.secretKey),
+          denominatedInSol: "true",
+          amount: 0,
+          slippage: 0,
+          priorityFee: 0,
+          pool: "pump",
+        }),
+      }
+    );
+
+    if (response.status === 200) {
+      const data = await response.json();
+      console.log("Transaction: https://solscan.io/tx/" + data.signature);
     } else {
-        console.log(response.statusText); 
+      console.log("❌ Trade API failed:", response.statusText);
     }
+  } catch (err) {
+    console.error("❌ sendCreateTx error:", err);
+  }
 }
 
+// -------------------- AI Metadata Generation --------------------
 async function generateTokenMetadata(tweet) {
   const prompt = `
-    You are a token generator. Based on this tweet JSON, create metadata for a meme token launch on Pump.fun:
-    - Token symbol (max 5 chars, all caps)
-    - Token name
-    - Token description (short, fun, crypto vibe)
-    - Token image (use tweet.user.profile_image_url)
+You are a meme token metadata generator. Based on this tweet JSON, create metadata for a meme token launch on Pump.fun:
+- Token symbol (max 5 chars, all caps)
+- Token name (fun, memeable)
+- Token description (short, crypto style)
+- Token image (use tweet.user.profile_image_url)
 
-    Tweet JSON:
-    ${JSON.stringify(tweet)}
-    Just give the value in JSON format {symbol, name, description, image}, No quotes Nothing else
-    `;
+Tweet JSON:
+${JSON.stringify(tweet)}
 
-  const model = await ai.getGenerativeModel({model:"gemini-2.5-flash"});
-  
-  const result = await model.generateContent(prompt);
-  let text = result.response.text();
-  text = text.replace(/```json|```/g, "").trim();
-  return JSON.parse(text);
+Return ONLY in pure JSON format:
+{ "symbol": "...", "name": "...", "description": "...", "image": "..." }
+`;
+
+  try {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
+        "HTTP-Referer": "https://yourapp.com", // optional but recommended
+        "X-Title": "PumpFun AI Metadata Generator"
+      },
+      body: JSON.stringify({
+        model: "mistralai/mistral-7b-instruct", // you can change this (see notes below)
+        messages: [
+          { role: "system", content: "You are a JSON-only meme token generator." },
+          { role: "user", content: prompt }
+        ],
+        temperature: 0.7,
+      }),
+    });
+
+    const data = await response.json();
+
+    let text = data.choices?.[0]?.message?.content?.trim();
+    if (!text) throw new Error("No content from model");
+
+    text = text.replace(/```json|```/g, "").trim();
+    return JSON.parse(text);
+  } catch (err) {
+    console.error("❌ AI metadata generation error:", err);
+    return null;
+  }
 }
+
+
+// -------------------- WebSocket Handling --------------------
 
 function connect() {
   ws = new WebSocket(wsUrl);
 
   ws.on("open", () => {
     console.log("✅ Connected to WebSocket server");
-    ws.send("40/tweets,"); 
+    ws.send("40/tweets,");
   });
 
   ws.on("message", async (message, isBinary) => {
@@ -147,7 +185,10 @@ function connect() {
           const [event, data] = parsed;
           if (event === "authenticated") {
             console.log("🔑 Authenticated");
-          } else if (event === "crypto:broadcast_key" || event === "crypto:key_rotate") {
+          } else if (
+            event === "crypto:broadcast_key" ||
+            event === "crypto:key_rotate"
+          ) {
             const raw = base64ToBytes(data.key_b64);
             const key = await importKey(raw);
             keyMap.set(data.key_id, key);
@@ -195,6 +236,8 @@ function connect() {
     setTimeout(connect, 2000);
   });
 }
+
+// -------------------- Handle Decrypted Messages --------------------
 
 function handleMessage({ t, d }) {
   switch (t) {
